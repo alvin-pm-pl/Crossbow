@@ -1,0 +1,8 @@
+--- # Poggit-CI Manifest. Open the CI at https://poggit.pmmp.io/ci/alvin0319/Crossbow
+build-by-default: true
+branches:
+- master
+projects:
+  Crossbow:
+    path: ""
+...
