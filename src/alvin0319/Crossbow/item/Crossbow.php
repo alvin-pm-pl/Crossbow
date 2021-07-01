@@ -46,6 +46,7 @@ final class Crossbow extends Tool{
 				$nbt = Entity::createBaseNBT($player->getDirectionVector()->multiply(1.3)->add($player->add(0, $player->getEyeHeight())), $directionVector, ($location->yaw > 180 ? 360 : 0) - $location->yaw, -$location->pitch);
 				/** @var ArrowEntity $entity */
 				$entity = Entity::createEntity("Arrow", $player->getLevel(), $nbt);
+				$entity->setOwningEntity($player);
 
 				if($multishot > 0){
 					$location = Location::fromObject($player->getDirectionVector()->multiply(1.3)->add($player->add(0, $player->getEyeHeight())), $player->getLevel(), $player->getYaw(), $player->getPitch());
@@ -54,6 +55,8 @@ final class Crossbow extends Tool{
 					for($i = 0; $i < 3; $i++){
 						/** @var ArrowEntity $arrow */
 						$arrow = Entity::createEntity("Arrow", $player->getLevel(), $nbt);
+
+						$arrow->setOwningEntity($player);
 
 						if($player->isCreative(true) || $i !== 1){
 							$arrow->setPickupMode(ArrowEntity::PICKUP_CREATIVE);
