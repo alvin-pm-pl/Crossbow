@@ -4,7 +4,7 @@ main: alvin0319\Crossbow\CrossbowLoader
 version: 1.0.1
 api: 3.0.0
 
-mcpe-protocol: 440
+mcpe-protocol: 448
 
 extensions:
   Core: ">=7.4"
