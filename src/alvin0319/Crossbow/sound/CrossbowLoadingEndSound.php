@@ -4,23 +4,26 @@ declare(strict_types=1);
 
 namespace alvin0319\Crossbow\sound;
 
-use pocketmine\level\sound\GenericSound;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
+use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
+use pocketmine\world\sound\Sound;
 
-final class CrossbowLoadingEndSound extends GenericSound{
+final class CrossbowLoadingEndSound implements Sound{
 
 	protected bool $quickCharge = false;
 
-	public function __construct(Vector3 $pos, bool $quickCharge = false){
-		parent::__construct($pos, -1);
+	public function __construct(bool $quickCharge = false){
 		$this->quickCharge = $quickCharge;
 	}
 
-	public function encode(){
-		$pk = new LevelSoundEventPacket();
-		$pk->sound = $this->quickCharge ? LevelSoundEventPacket::SOUND_CROSSBOW_QUICK_CHARGE_END : LevelSoundEventPacket::SOUND_CROSSBOW_LOADING_END;
-		$pk->position = $this->floor();
-		return $pk;
+	public function encode(Vector3 $pos) : array{
+		return [
+			LevelSoundEventPacket::nonActorSound(
+				$this->quickCharge ? LevelSoundEvent::CROSSBOW_QUICK_CHARGE_END : LevelSoundEvent::CROSSBOW_LOADING_END,
+				$pos,
+				false
+			)
+		];
 	}
 }

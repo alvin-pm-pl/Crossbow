@@ -4,20 +4,20 @@ declare(strict_types=1);
 
 namespace alvin0319\Crossbow\sound;
 
-use pocketmine\level\sound\GenericSound;
 use pocketmine\math\Vector3;
 use pocketmine\network\mcpe\protocol\LevelSoundEventPacket;
+use pocketmine\network\mcpe\protocol\types\LevelSoundEvent;
+use pocketmine\world\sound\Sound;
 
-final class CrossbowShootSound extends GenericSound{
+final class CrossbowShootSound implements Sound{
 
-	public function __construct(Vector3 $pos){
-		parent::__construct($pos, -1);
-	}
-
-	public function encode(){
-		$pk = new LevelSoundEventPacket();
-		$pk->sound = LevelSoundEventPacket::SOUND_CROSSBOW_SHOOT;
-		$pk->position = $this->floor();
-		return $pk;
+	public function encode(Vector3 $pos) : array{
+		return [
+			LevelSoundEventPacket::nonActorSound(
+				LevelSoundEvent::CROSSBOW_SHOOT,
+				$pos,
+				false
+			)
+		];
 	}
 }

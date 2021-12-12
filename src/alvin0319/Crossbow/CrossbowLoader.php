@@ -5,18 +5,28 @@ declare(strict_types=1);
 namespace alvin0319\Crossbow;
 
 use alvin0319\Crossbow\item\Crossbow;
+use pocketmine\data\bedrock\EnchantmentIdMap;
+use pocketmine\data\bedrock\EnchantmentIds;
 use pocketmine\event\Listener;
-use pocketmine\event\player\PlayerInteractEvent;
+use pocketmine\event\player\PlayerItemUseEvent;
 use pocketmine\event\server\DataPacketReceiveEvent;
+use pocketmine\inventory\CreativeInventory;
 use pocketmine\item\enchantment\Enchantment;
-use pocketmine\item\Item;
+use pocketmine\item\enchantment\ItemFlags;
+use pocketmine\item\enchantment\Rarity;
+use pocketmine\item\enchantment\StringToEnchantmentParser;
 use pocketmine\item\ItemFactory;
+use pocketmine\item\ItemIdentifier;
 use pocketmine\item\ItemIds;
+use pocketmine\item\ItemUseResult;
+use pocketmine\network\mcpe\convert\TypeConverter;
 use pocketmine\network\mcpe\protocol\InventoryTransactionPacket;
 use pocketmine\network\mcpe\protocol\types\inventory\ReleaseItemTransactionData;
 use pocketmine\network\mcpe\protocol\types\inventory\UseItemTransactionData;
 use pocketmine\plugin\PluginBase;
 use pocketmine\scheduler\ClosureTask;
+use pocketmine\utils\AssumptionFailedError;
+use function var_dump;
 
 final class CrossbowLoader extends PluginBase implements Listener{
 
@@ -25,20 +35,25 @@ final class CrossbowLoader extends PluginBase implements Listener{
 	public function onEnable() : void{
 		$this->getServer()->getPluginManager()->registerEvents($this, $this);
 
-		ItemFactory::registerItem($crossbow = new Crossbow(ItemIds::CROSSBOW, 0, "Crossbow"), true);
+		ItemFactory::getInstance()->register($crossbow = new Crossbow(new ItemIdentifier(ItemIds::CROSSBOW, 0), "Crossbow"), true);
 
-		Item::addCreativeItem($crossbow);
+		CreativeInventory::getInstance()->add($crossbow);
 
-		Enchantment::registerEnchantment(new Enchantment(Enchantment::MULTISHOT, "Multishot", Enchantment::RARITY_MYTHIC, Enchantment::SLOT_BOW, Enchantment::SLOT_NONE, 1));
-		Enchantment::registerEnchantment(new Enchantment(Enchantment::QUICK_CHARGE, "Quick charge", Enchantment::RARITY_MYTHIC, Enchantment::SLOT_BOW, Enchantment::SLOT_NONE, 3));
+		$enchMap = EnchantmentIdMap::getInstance();
 
-		$this->getScheduler()->scheduleRepeatingTask(new ClosureTask(function(int $_) : void{
+		$enchMap->register(EnchantmentIds::MULTISHOT, $multishot = new Enchantment("Multishot", Rarity::MYTHIC, ItemFlags::BOW, ItemFlags::NONE, 1));
+		$enchMap->register(EnchantmentIds::QUICK_CHARGE, $quickCharge = new Enchantment("Quick charge", Rarity::MYTHIC, ItemFlags::BOW, ItemFlags::NONE, 3));
+
+		StringToEnchantmentParser::getInstance()->register("multishot", fn() => $multishot);
+		StringToEnchantmentParser::getInstance()->register("quick_charge", fn() => $quickCharge);
+
+		$this->getScheduler()->scheduleRepeatingTask(new ClosureTask(function() use ($enchMap) : void{
 			foreach(self::$crossbowLoadData as $name => $bool){
 				$player = $this->getServer()->getPlayerExact($name);
 				if($player !== null){
 					$itemInHand = $player->getInventory()->getItemInHand();
 					if($itemInHand instanceof Crossbow){
-						$quickCharge = $itemInHand->getEnchantmentLevel(Enchantment::QUICK_CHARGE);
+						$quickCharge = $itemInHand->getEnchantmentLevel($enchMap->fromId(EnchantmentIds::QUICK_CHARGE));
 						$time = $player->getItemUseDuration();
 						if($time >= 24 - $quickCharge * 5){
 							$itemInHand->onReleaseUsing($player);
@@ -55,33 +70,41 @@ final class CrossbowLoader extends PluginBase implements Listener{
 		}), 1);
 	}
 
+	/**
+	 * @param DataPacketReceiveEvent $event
+	 *
+	 * @handleCancelled true
+	 */
 	public function onDataPacketReceive(DataPacketReceiveEvent $event) : void{
 		$packet = $event->getPacket();
-		$player = $event->getPlayer();
 		if(!$packet instanceof InventoryTransactionPacket){
 			return;
 		}
+		$player = $event->getOrigin()->getPlayer() ?: throw new AssumptionFailedError("Player is not online");
 		$trData = $packet->trData;
+		$conv = TypeConverter::getInstance();
 		switch(true){
 			case $trData instanceof UseItemTransactionData:
-				$item = $trData->getItemInHand()->getItemStack();
+				$item = $conv->netItemStackToCore($trData->getItemInHand()->getItemStack());
 				if($item instanceof Crossbow){
-					$event->setCancelled();
+					$event->cancel();
 					$oldItem = clone $item;
-					$ev = new PlayerInteractEvent($player, $item, null, $trData->getBlockPos(), $trData->getFace(), PlayerInteractEvent::RIGHT_CLICK_AIR);
+					$ev = new PlayerItemUseEvent($player, $item, $player->getDirectionVector());
 					if($player->hasItemCooldown($item) || $player->isSpectator()){
-						$ev->setCancelled();
+						$ev->cancel();
 					}
 					$ev->call();
 					if($ev->isCancelled()){
+						var_dump("???");
 						return;
 					}
-					if(!$item->onClickAir($player, $player->getDirectionVector())){
-						$player->getInventory()->sendSlot($player->getInventory()->getHeldItemIndex(), [$player]);
+					if($item->onClickAir($player, $player->getDirectionVector())->equals(ItemUseResult::FAIL())){
+						var_dump("?");
+						$player->getNetworkSession()->getInvManager()?->syncSlot($player->getInventory(), $player->getInventory()->getHeldItemIndex());
 						return;
 					}
 					$player->resetItemCooldown($item);
-					if(!$item->equalsExact($oldItem) and $oldItem->equalsExact($player->getInventory()->getItemInHand())){
+					if(!$item->equalsExact($oldItem) && $oldItem->equalsExact($player->getInventory()->getItemInHand())){
 						$player->getInventory()->setItemInHand($item);
 					}
 					if(!$oldItem->isCharged() && !$item->isCharged()){
@@ -94,11 +117,11 @@ final class CrossbowLoader extends PluginBase implements Listener{
 			case $trData instanceof ReleaseItemTransactionData:
 				$item = $player->getInventory()->getItemInHand();
 				if($item instanceof Crossbow){
-					$event->setCancelled();
+					$event->cancel();
 					if(!$player->isUsingItem() || $player->hasItemCooldown($item)){
 						return;
 					}
-					if($item->onReleaseUsing($player)){
+					if($item->onReleaseUsing($player)->equals(ItemUseResult::SUCCESS())){
 						$player->resetItemCooldown($item);
 						$player->getInventory()->setItemInHand($item);
 					}

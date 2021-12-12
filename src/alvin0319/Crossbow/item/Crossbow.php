@@ -9,7 +9,10 @@ use alvin0319\Crossbow\event\EntityShootCrossbowEvent;
 use alvin0319\Crossbow\sound\CrossbowLoadingEndSound;
 use alvin0319\Crossbow\sound\CrossbowLoadingStartSound;
 use alvin0319\Crossbow\sound\CrossbowShootSound;
+use pocketmine\data\bedrock\EnchantmentIdMap;
+use pocketmine\data\bedrock\EnchantmentIds;
 use pocketmine\entity\Entity;
+use pocketmine\entity\Location;
 use pocketmine\entity\projectile\Arrow as ArrowEntity;
 use pocketmine\entity\projectile\Projectile;
 use pocketmine\event\entity\ProjectileLaunchEvent;
@@ -18,47 +21,51 @@ use pocketmine\item\enchantment\Enchantment;
 use pocketmine\item\Item;
 use pocketmine\item\ItemFactory;
 use pocketmine\item\ItemIds;
+use pocketmine\item\ItemUseResult;
 use pocketmine\item\Tool;
-use pocketmine\level\Location;
+use pocketmine\item\VanillaItems;
 use pocketmine\math\Vector3;
-use pocketmine\Player;
+use pocketmine\player\Player;
 use function cos;
 use function deg2rad;
 use function sin;
 
 final class Crossbow extends Tool{
 
-	public function onClickAir(Player $player, Vector3 $directionVector) : bool{
-		$arrow = ItemFactory::get(ItemIds::ARROW);
-		$quickCharge = $this->getEnchantmentLevel(Enchantment::QUICK_CHARGE);
-		$multishot = $this->getEnchantmentLevel(Enchantment::MULTISHOT);
+	public function onClickAir(Player $player, Vector3 $directionVector) : ItemUseResult{
+		$arrow = VanillaItems::ARROW()
+			->setCount(1);
+		$enchIdMap = EnchantmentIdMap::getInstance();
+		$quickCharge = $this->getEnchantmentLevel($enchIdMap->fromId(EnchantmentIds::QUICK_CHARGE));
+		$multishot = $this->getEnchantmentLevel($enchIdMap->fromId(EnchantmentIds::MULTISHOT));
 		$location = $player->getLocation();
 		if(!$this->isCharged()){
 			if($player->isSurvival() && !($player->getInventory()->contains($arrow))){
-				return false;
+				return ItemUseResult::FAIL();
 			}
-			$player->getLevel()->addSound(new CrossbowLoadingStartSound($location, $quickCharge > 0));
+			$player->getWorld()->addSound($location, new CrossbowLoadingStartSound($quickCharge > 0));
 			CrossbowLoader::$crossbowLoadData[$player->getName()] = true;
 		}else{
 			$item = Item::nbtDeserialize($this->getNamedTag()->getCompoundTag("chargedItem"));
 			$this->setCharged(null);
 			if($item instanceof ArrowItem){
-				$nbt = Entity::createBaseNBT($player->getDirectionVector()->multiply(1.3)->add($player->add(0, $player->getEyeHeight())), $directionVector, ($location->yaw > 180 ? 360 : 0) - $location->yaw, -$location->pitch);
-				/** @var ArrowEntity $entity */
-				$entity = Entity::createEntity("Arrow", $player->getLevel(), $nbt);
-				$entity->setOwningEntity($player);
+				//$nbt = Entity::createBaseNBT($player->getDirectionVector()->multiply(1.3)->add($player->add(0, $player->getEyeHeight())), $directionVector, ($location->yaw > 180 ? 360 : 0) - $location->yaw, -$location->pitch);
+				///** @var ArrowEntity $entity */
+				//$entity = Entity::createEntity("Arrow", $player->getLevel(), $nbt);
+				//$entity->setOwningEntity($player);
+
+				$entity = new ArrowEntity(Location::fromObject($player->getDirectionVector()->multiply(1.3)->addVector($player->getPosition()->add(0, $player->getEyeHeight(), 0)), $player->getWorld(), ($location->yaw > 180 ? 360 : 0) - $location->yaw, -$location->pitch), $player, false);
 
 				if($multishot > 0){
-					$location = Location::fromObject($player->getDirectionVector()->multiply(1.3)->add($player->add(0, $player->getEyeHeight())), $player->getLevel(), $player->getYaw(), $player->getPitch());
+					$location = Location::fromObject($player->getDirectionVector()->multiply(1.3)->addVector($player->getPosition()->add(0, $player->getEyeHeight(), 0)), $player->getWorld(), $player->getLocation()->getYaw(), $player->getLocation()->getPitch());
 					$location->yaw -= 10;
 
 					for($i = 0; $i < 3; $i++){
-						/** @var ArrowEntity $arrow */
-						$arrow = Entity::createEntity("Arrow", $player->getLevel(), $nbt);
+						$arrow = new ArrowEntity($location, $player, false);
 
 						$arrow->setOwningEntity($player);
 
-						if($player->isCreative(true) || $i !== 1){
+						if($i !== 1 || $player->isCreative(true)){
 							$arrow->setPickupMode(ArrowEntity::PICKUP_CREATIVE);
 						}
 
@@ -79,9 +86,9 @@ final class Crossbow extends Tool{
 						$this->applyDamage($multishot ? 3 : 1);
 					}
 
-					$location->getLevel()->addSound(new CrossbowShootSound($location));
+					$location->getWorld()->addSound($location, new CrossbowShootSound());
 
-					return true;
+					return ItemUseResult::SUCCESS();
 				}
 				$entity->setMotion($directionVector);
 
@@ -92,7 +99,7 @@ final class Crossbow extends Tool{
 
 				if($ev->isCancelled()){
 					$entity->flagForDespawn();
-					return false;
+					return ItemUseResult::FAIL();
 				}
 
 				$entity->setMotion($entity->getMotion()->multiply($ev->getForce()));
@@ -102,11 +109,11 @@ final class Crossbow extends Tool{
 					$projectileEv->call();
 					if($projectileEv->isCancelled()){
 						$ev->getProjectile()->flagForDespawn();
-						return false;
+						return ItemUseResult::FAIL();
 					}
 
 					$ev->getProjectile()->spawnToAll();
-					$location->getLevel()->addSound(new CrossbowShootSound($location));
+					$location->getWorld()->addSound($location, new CrossbowShootSound());
 				}else{
 					$entity->spawnToAll();
 				}
@@ -115,28 +122,26 @@ final class Crossbow extends Tool{
 					$this->applyDamage($multishot ? 3 : 1);
 				}
 			}else{
-				return true;
+				return ItemUseResult::SUCCESS();
 			}
 		}
-		return true;
+		return ItemUseResult::SUCCESS();
 	}
 
-	public function onReleaseUsing(Player $player) : bool{
+	public function onReleaseUsing(Player $player) : ItemUseResult{
 		unset(CrossbowLoader::$crossbowLoadData[$player->getName()]);
-		$arrow = ItemFactory::get(ItemIds::ARROW);
-		$quickCharge = $this->getEnchantmentLevel(Enchantment::QUICK_CHARGE);
+		$arrow = VanillaItems::ARROW()->setCount(1);
+		$quickCharge = $this->getEnchantmentLevel(EnchantmentIdMap::getInstance()->fromId(EnchantmentIds::QUICK_CHARGE));
 		$time = $player->getItemUseDuration();
 		if($time >= 24 - $quickCharge * 5){
-			if($player->isSurvival()){
-				if($player->getInventory()->contains($arrow)){
-					$player->getInventory()->removeItem($arrow);
-				}
+			if($player->isSurvival() && $player->getInventory()->contains($arrow)){
+				$player->getInventory()->removeItem($arrow);
 			}
 			$this->setCharged($arrow);
-			$player->getLevel()->addSound(new CrossbowLoadingEndSound($player->getLocation(), $quickCharge > 0));
-			return true;
+			$player->getWorld()->addSound($player->getLocation(), new CrossbowLoadingEndSound($quickCharge > 0));
+			return ItemUseResult::SUCCESS();
 		}
-		return false;
+		return ItemUseResult::FAIL();
 	}
 
 	public function getMaxDurability() : int{
@@ -151,7 +156,7 @@ final class Crossbow extends Tool{
 		if($item === null){
 			$this->getNamedTag()->removeTag("chargedItem");
 		}else{
-			$this->getNamedTag()->setTag($item->nbtSerialize(-1, "chargedItem"));
+			$this->getNamedTag()->setTag("chargedItem", $item->nbtSerialize(-1));
 		}
 	}
 }

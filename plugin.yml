@@ -1,12 +1,10 @@
 name: Crossbow
 author: alvin0319
 main: alvin0319\Crossbow\CrossbowLoader
-version: 1.0.2
-api: 3.0.0
+version: 2.0.0
+api: 4.0.0
 
-mcpe-protocol:
-  - 448
-  - 440
+mcpe-protocol: 475
 
 extensions:
   Core: ">=7.4"
