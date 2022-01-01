@@ -26,7 +26,6 @@ use pocketmine\network\mcpe\protocol\types\inventory\UseItemTransactionData;
 use pocketmine\plugin\PluginBase;
 use pocketmine\scheduler\ClosureTask;
 use pocketmine\utils\AssumptionFailedError;
-use function var_dump;
 
 final class CrossbowLoader extends PluginBase implements Listener{
 
@@ -95,11 +94,9 @@ final class CrossbowLoader extends PluginBase implements Listener{
 					}
 					$ev->call();
 					if($ev->isCancelled()){
-						var_dump("???");
 						return;
 					}
 					if($item->onClickAir($player, $player->getDirectionVector())->equals(ItemUseResult::FAIL())){
-						var_dump("?");
 						$player->getNetworkSession()->getInvManager()?->syncSlot($player->getInventory(), $player->getInventory()->getHeldItemIndex());
 						return;
 					}
